@@ -1,0 +1,123 @@
+syntax = "proto3";
+
+package dataservice;
+
+service DataService {
+  // Single record operations
+  rpc GetRecord(GetRecordRequest) returns (Record);
+  rpc GetRecords(GetRecordsRequest) returns (RecordsResponse);
+  
+  // Bulk operations that cause performance issues in REST
+  rpc GetMultipleRecords(MultipleRecordsRequest) returns (MultipleRecordsResponse);
+  rpc SearchRecords(SearchRequest) returns (SearchResponse);
+  
+  // Streaming operations (gRPC advantage)
+  rpc StreamRecords(StreamRequest) returns (stream Record);
+  rpc BulkUpload(stream Record) returns (BulkUploadResponse);
+  rpc BidirectionalSync(stream SyncRequest) returns (stream SyncResponse);
+}
+
+message Record {
+  string id = 1;
+  string account_number = 2;
+  string customer_id = 3;
+  double balance = 4;
+  string currency = 5;
+  string status = 6;
+  int64 created_timestamp = 7;
+  int64 updated_timestamp = 8;
+  repeated Transaction recent_transactions = 9;
+  AccountMetadata metadata = 10;
+}
+
+message Transaction {
+  string transaction_id = 1;
+  double amount = 2;
+  string type = 3;
+  string description = 4;
+  int64 timestamp = 5;
+  string reference = 6;
+}
+
+message AccountMetadata {
+  string branch_code = 1;
+  string product_type = 2;
+  repeated string tags = 3;
+  map<string, string> custom_fields = 4;
+}
+
+message GetRecordRequest {
+  string id = 1;
+  bool include_transactions = 2;
+}
+
+message GetRecordsRequest {
+  repeated string ids = 1;
+  bool include_transactions = 2;
+  int32 limit = 3;
+}
+
+message RecordsResponse {
+  repeated Record records = 1;
+  int32 total_count = 2;
+  bool has_more = 3;
+}
+
+message MultipleRecordsRequest {
+  repeated string account_numbers = 1;
+  repeated string customer_ids = 2;
+  string status_filter = 3;
+  double min_balance = 4;
+  double max_balance = 5;
+  bool include_transactions = 6;
+  int32 limit = 7;
+}
+
+message MultipleRecordsResponse {
+  repeated Record records = 1;
+  int32 total_found = 2;
+  int32 query_time_ms = 3;
+}
+
+message SearchRequest {
+  string query = 1;
+  repeated string fields = 2;
+  map<string, string> filters = 3;
+  int32 page = 4;
+  int32 page_size = 5;
+  string sort_by = 6;
+  bool sort_desc = 7;
+}
+
+message SearchResponse {
+  repeated Record records = 1;
+  int32 total_results = 2;
+  int32 page = 3;
+  int32 total_pages = 4;
+  repeated string facets = 5;
+}
+
+message StreamRequest {
+  string filter = 1;
+  int32 batch_size = 2;
+  bool real_time = 3;
+}
+
+message BulkUploadResponse {
+  int32 processed_count = 1;
+  int32 success_count = 2;
+  int32 error_count = 3;
+  repeated string errors = 4;
+}
+
+message SyncRequest {
+  string client_id = 1;
+  int64 last_sync_timestamp = 2;
+  repeated string record_ids = 3;
+}
+
+message SyncResponse {
+  repeated Record updated_records = 1;
+  repeated string deleted_record_ids = 2;
+  int64 sync_timestamp = 3;
+}

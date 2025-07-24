@@ -1,0 +1,32 @@
+
+{
+  "name": "grpc-vs-rest-poc",
+  "version": "1.0.0",
+  "description": "POC demonstrating gRPC performance advantages over REST",
+  "main": "index.js",
+  "scripts": {
+    "install-deps": "npm install",
+    "generate-proto": "grpc_tools_node_protoc --js_out=import_style=commonjs,binary:./generated --grpc_out=grpc_js:./generated --plugin=protoc-gen-grpc=./node_modules/.bin/grpc_tools_node_protoc_plugin ./proto/*.proto",
+    "start-rest": "node servers/rest-server.js",
+    "start-grpc": "node servers/grpc-server.js",
+    "start-dashboard": "node dashboard/metrics-server.js",
+    "load-test": "node load-test/load-tester.js",
+    "compare": "node load-test/compare-performance.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "@grpc/grpc-js": "^1.9.14",
+    "@grpc/proto-loader": "^0.7.10",
+    "grpc-tools": "^1.12.4",
+    "autocannon": "^7.12.0",
+    "ws": "^8.14.2",
+    "cors": "^2.8.5",
+    "compression": "^1.7.4",
+    "prom-client": "^15.0.0",
+    "clinic": "^12.2.0",
+    "0x": "^5.5.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}
