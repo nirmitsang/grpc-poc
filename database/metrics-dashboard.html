@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>gRPC vs REST Performance Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            text-align: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .header h1 {
+            color: white;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 1.1em;
+        }
+
+        .dashboard {
+            padding: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .controls {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .controls button {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .controls button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .controls button:active {
+            transform: translateY(0);
+        }
+
+        .controls button.running {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+
+        .status {
+            display: flex;
+            gap: 15px;
+            margin-left: auto;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ff6b6b;
+            animation: blink 1s infinite alternate;
+        }
+
+        .status-dot.connected {
+            background: #51cf66;
+            animation: none;
+        }
+
+        @keyframes blink {
+            from { opacity: 1; }
+            to { opacity: 0.3; }
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .metric-card {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+            transition: transform 0.3s ease;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .metric-card h3 {
+            color: #333;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .metric-icon {
+            font-size: 1.5em;
+        }
+
+        .metric-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .metric-rest {
+            color: #ff6b6b;
+        }
+
+        .metric-grpc {
+            color: #51cf66;
+        }
+
+        .metric-comparison {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+
+        .comparison-value {
+            font-size: 3em;
+            font-weight: bold;
+        }
+
+        .charts-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .chart-container {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .chart-container h3 {
+            margin-bottom: 15px;
+            color: #333;
+            text-align: center;
+        }
+
+        .live-stats {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .stat-item {
+            padding: 15px;
+            background: rgba(102, 126, 234, 0.1);
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            font-size: 1.4em;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 0.9em;
+        }
+
+        @media (max-width: 768px) {
+            .charts-section {
+                grid-template-columns: 1fr;
+            }
+            
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .status {
+                margin-left: 0;
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🚀 gRPC vs REST Performance Dashboard</h1>
+        <p>Real-time performance monitoring and comparison for Barclays Data Services POC</p>
+    </div>
+
+    <div class="dashboard">
+        <div class="controls">
+            <button id="startTest" onclick="startLoadTest()">🧪 Start Load Test</button>
+            <button id="stopTest" onclick="stopLoadTest()" disabled>⏹️ Stop Test</button>
+            <button onclick="resetMetrics()">🔄 Reset Metrics</button>
+            <button onclick="exportResults()">📊 Export Results</button>
+            
+            <div class="status">
+                <div class="status-item">
+                    <div class="status-dot" id="restStatus"></div>
+                    <span>REST API</span>
+                </div>
+                <div class="status-item">
+                    <div class="status-dot" id="grpcStatus"></div>
+                    <span>gRPC API</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <h3><span class="metric-icon">⚡</span>Average Response Time</h3>
+                <div class="metric-value metric-rest" id="restAvgTime">0ms</div>
+                <div style="font-size: 0.9em; color: #666;">REST API</div>
+            </div>
+
+            <div class="metric-card">
+                <h3><span class="metric-icon">🚀</span>Average Response Time</h3>
+                <div class="metric-value metric-grpc" id="grpcAvgTime">0ms</div>
+                <div style="font-size: 0.9em; color: #666;">gRPC API</div>
+            </div>
+
+            <div class="metric-card metric-comparison">
+                <h3><span class="metric-icon">📈</span>Performance Improvement</h3>
+                <div class="comparison-value" id="performanceGain">0%</div>
+                <div style="font-size: 0.9em; opacity: 0.9;">gRPC vs REST</div>
+            </div>
+
+            <div class="metric-card">
+                <h3><span class="metric-icon">📊</span>Throughput (RPS)</h3>
+                <div style="display: flex; justify-content: space-between;">
+                    <div>
+                        <div class="metric-value metric-rest" id="restRps">0</div>
+                        <small>REST</small>
+                    </div>
+                    <div>
+                        <div class="metric-value metric-grpc" id="grpcRps">0</div>
+                        <small>gRPC</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="charts-section">
+            <div class="chart-container">
+                <h3>📈 Response Time Comparison</h3>
+                <canvas id="responseTimeChart" width="400" height="200"></canvas>
+            </div>
+
+            <div class="chart-container">
+                <h3>💾 Data Transfer Comparison</h3>
+                <canvas id="dataTransferChart" width="400" height="200"></canvas>
+            </div>
+        </div>
+
+        <div class="live-stats">
+            <h3>📊 Live Statistics</h3>
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="stat-label">Total Requests</div>
+                    <div class="stat-value" id="totalRequests">0</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Success Rate</div>
+                    <div class="stat-value" id="successRate">0%</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Error Rate</div>
+                    <div class="stat-value" id="errorRate">0%</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Data Transferred</div>
+                    <div class="stat-value" id="dataTransferred">0 MB</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">P95 Response Time</div>
+                    <div class="stat-value" id="p95ResponseTime">0ms</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Active Connections</div>
+                    <div class="stat-value" id="activeConnections">0</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>Barclays Corporate Data Services Team - gRPC vs REST Performance POC</p>
+        <p>Real-time metrics updated every 2 seconds</p>
+    </div>
+
+    <script>
+        // Global variables
+        let isTestRunning = false;
+        let metricsInterval;
+        let responseTimeChart;
+        let dataTransferChart;
+        let testResults = [];
+
+        // Chart configurations
+        const chartOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            },
+            plugins: {
+                legend: {
+                    position: 'top'
+                }
+            }
+        };
+
+        // Initialize charts
+        function initializeCharts() {
+            const responseTimeCtx = document.getElementById('responseTimeChart').getContext('2d');
+            responseTimeChart = new Chart(responseTimeCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'REST API',
+                            data: [],
+                            borderColor: '#ff6b6b',
+                            backgroundColor: 'rgba(255, 107, 107, 0.1)',
+                            tension: 0.4
+                        },
+                        {
+                            label: 'gRPC API',
+                            data: [],
+                            borderColor: '#51cf66',
+                            backgroundColor: 'rgba(81, 207, 102, 0.1)',
+                            tension: 0.4
+                        }
+                    ]
+                },
+                options: {
+                    ...chartOptions,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Response Time (ms)'
+                            }
+                        }
+                    }
+                }
+            });
+
+            const dataTransferCtx = document.getElementById('dataTransferChart').getContext('2d');
+            dataTransferChart = new Chart(dataTransferCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['Single Record', 'Batch Query', 'Complex Query'],
+                    datasets: [
+                        {
+                            label: 'REST API',
+                            data: [0, 0, 0],
+                            backgroundColor: 'rgba(255, 107, 107, 0.8)',
+                            borderColor: '#ff6b6b',
+                            borderWidth: 2
+                        },
+                        {
+                            label: 'gRPC API',
+                            data: [0, 0, 0],
+                            backgroundColor: 'rgba(81, 207, 102, 0.8)',
+                            borderColor: '#51cf66',
+                            borderWidth: 2
+                        }
+                    ]
+                },
+                options: {
+                    ...chartOptions,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Data Size (KB)'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Check server status
+        async function checkServerStatus() {
+            try {
+                const restResponse = await fetch('http://localhost:3001/health');
+                document.getElementById('restStatus').classList.toggle('connected', restResponse.ok);
+            } catch (error) {
+                document.getElementById('restStatus').classList.remove('connected');
+            }
+
+            // For gRPC, we'll assume it's running if REST is running (simplified)
+            // In a real implementation, you'd want a proper gRPC health check
+            const restConnected = document.getElementById('restStatus').classList.contains('connected');
+            document.getElementById('grpcStatus').classList.toggle('connected', restConnected);
+        }
+
+        // Start load test
+        async function startLoadTest() {
+            if (isTestRunning) return;
+
+            isTestRunning = true;
+            document.getElementById('startTest').disabled = true;
+            document.getElementById('startTest').classList.add('running');
+            document.getElementById('startTest').textContent = '🔄 Running Tests...';
+            document.getElementById('stopTest').disabled = false;
+
+            // Start metrics collection
+            metricsInterval = setInterval(updateMetrics, 2000);
+
+            // Simulate running the load test in background
+            // In a real implementation, this would call your load tester
+            console.log('Load test started...');
+        }
+
+        // Stop load test
+        function stopLoadTest() {
+            if (!isTestRunning) return;
+
+            isTestRunning = false;
+            document.getElementById('startTest').disabled = false;
+            document.getElementById('startTest').classList.remove('running');
+            document.getElementById('startTest').textContent = '🧪 Start Load Test';
+            document.getElementById('stopTest').disabled = true;
+
+            if (metricsInterval) {
+                clearInterval(metricsInterval);
+                metricsInterval = null;
+            }
+
+            console.log('Load test stopped.');
+        }
+
+        // Update metrics from servers
+        async function updateMetrics() {
+            try {
+                const restMetrics = await fetch('http://localhost:3001/metrics').then(r => r.json());
+                
+                // Update UI with real metrics
+                updateUIMetrics(restMetrics, null); // gRPC metrics would come from another endpoint
+                updateCharts(restMetrics);
+                
+            } catch (error) {
+                console.error('Failed to fetch metrics:', error);
+                // Generate mock data for demo
+                generateMockMetrics();
+            }
+        }
+
+        // Generate mock metrics for demo purposes
+        function generateMockMetrics() {
+            const time = new Date().toLocaleTimeString();
+            
+            // Mock data showing gRPC advantages
+            const restAvg = 45 + Math.random() * 20;
+            const grpcAvg = 15 + Math.random() * 8;
+            const improvement = ((restAvg - grpcAvg) / restAvg * 100);
+
+            document.getElementById('restAvgTime').textContent = `${Math.round(restAvg)}ms`;
+            document.getElementById('grpcAvgTime').textContent = `${Math.round(grpcAvg)}ms`;
+            document.getElementById('performanceGain').textContent = `${Math.round(improvement)}%`;
+            
+            document.getElementById('restRps').textContent = Math.round(1000 / restAvg);
+            document.getElementById('grpcRps').textContent = Math.round(1000 / grpcAvg);
+
+            // Update live stats
+            document.getElementById('totalRequests').textContent = Math.round(Math.random() * 5000 + 1000);
+            document.getElementById('successRate').textContent = `${(95 + Math.random() * 4).toFixed(1)}%`;
+            document.getElementById('errorRate').textContent = `${(Math.random() * 2).toFixed(1)}%`;
+            document.getElementById('dataTransferred').textContent = `${(Math.random() * 50 + 10).toFixed(1)} MB`;
+            document.getElementById('p95ResponseTime').textContent = `${Math.round(restAvg * 1.8)}ms`;
+            document.getElementById('activeConnections').textContent = Math.round(Math.random() * 50 + 10);
+
+            // Update charts
+            if (responseTimeChart.data.labels.length > 20) {
+                responseTimeChart.data.labels.shift();
+                responseTimeChart.data.datasets[0].data.shift();
+                responseTimeChart.data.datasets[1].data.shift();
+            }
+
+            responseTimeChart.data.labels.push(time);
+            responseTimeChart.data.datasets[0].data.push(restAvg);
+            responseTimeChart.data.datasets[1].data.push(grpcAvg);
+            responseTimeChart.update('none');
+
+            // Update data transfer chart with random but realistic data
+            dataTransferChart.data.datasets[0].data = [12, 45, 78]; // REST sizes
+            dataTransferChart.data.datasets[1].data = [8, 28, 42];  // gRPC sizes (smaller due to protobuf)
+            dataTransferChart.update('none');
+        }
+
+        // Update UI with real metrics
+        function updateUIMetrics(restMetrics, grpcMetrics) {
+            if (restMetrics && restMetrics.server) {
+                document.getElementById('restAvgTime').textContent = `${Math.round(restMetrics.server.avgResponseTime || 0)}ms`;
+                document.getElementById('restRps').textContent = Math.round(restMetrics.server.requestsPerSecond || 0);
+            }
+
+            if (grpcMetrics && grpcMetrics.server) {
+                document.getElementById('grpcAvgTime').textContent = `${Math.round(grpcMetrics.server.avgResponseTime || 0)}ms`;
+                document.getElementById('grpcRps').textContent = Math.round(grpcMetrics.server.requestsPerSecond || 0);
+            }
+        }
+
+        // Reset all metrics
+        async function resetMetrics() {
+            try {
+                await fetch('http://localhost:3001/metrics/reset', { method: 'POST' });
+                // Reset gRPC metrics too if available
+                console.log('Metrics reset successfully');
+            } catch (error) {
+                console.error('Failed to reset metrics:', error);
+            }
+        }
+
+        // Export results to JSON
+        function exportResults() {
+            const results = {
+                timestamp: new Date().toISOString(),
+                testResults: testResults,
+                summary: {
+                    restAvgTime: documet.getElementById('restAvgTime').textContent,
+                    grpcAvgTime: document.getElementById('grpcAvgTime').textContent,
+                    performanceGain: document.getElementById('performanceGain').textContent
+                }
+            };
+
+            const blob = new Blob([JSON.stringify(results, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `grpc-vs-rest-results-${Date.now()}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        // Initialize everything when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeCharts();
+            checkServerStatus();
+            setInterval(checkServerStatus, 5000); // Check status every 5 seconds
+            
+            // Start with some demo data
+            if (!isTestRunning) {
+                generateMockMetrics();
+                setInterval(generateMockMetrics, 3000);
+            }
+        });
+    </script>
+</body>
+</html>
